@@ -69,16 +69,21 @@ fetch(Sql, Databse)->
 %%	end.
 	todo.
 
-get_key(undefined)->
-%%	@todo set default key
-%%	{success, ServerId} = dd_config:get_cfg(serverid),
-%%	ServerId * 100000000 + 1
-	todo;
-get_key(Max)->
-%%	@todo set auto_increment key
-%%	{success, ServerId} = dd_config:get_cfg(serverid),
-%%	ServerId * 100000000 + Max + 1
-	todo.
+%%example
+get_key(TableName)->
+	gen_server:call(chores, {apply,
+		fun()->
+			Key =
+				case ets:lookup(ets_table_autoIncrement_key, TableName) of
+					[] ->
+						{success, ServerId} = dd_config:get_cfg(serverid),
+						ServerId * 10000000 + 1;
+					[{_, Max}]->
+						Max + 1
+				end,
+			ets:insert(ets_table_autoIncrement_key, {TableName, Key}),
+			Key
+		end, []}).
 
 %%%===================================================================
 %%% SqlHelper

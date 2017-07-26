@@ -209,6 +209,13 @@ generation_hrl(FileContents, HrlPath)->
 
 
 generation_erl(FileContents,ProtoErlPath)->
+	ToolErlPath = lists:concat([ProtoErlPath, "notebook.erl"]),
+	file:delete(ToolErlPath),
+	{ok, ToolErlFd} = file:open(ToolErlPath, [write, append]),
+	io:format(ToolErlFd, ?HEAD, [?UNICODE2LIST("此文件为自动生成，请勿修改"), time_to_local_string(unixtime()), "notebook"]),
+	io:format(ToolErlFd, "\n-export([init/1]).\n", []),
+	io:format(ToolErlFd, "\n\ninit(TableName)->", []),
+	
 	lists:map(fun(#table{table_name = TableName, columns = Columns, database = DataBase, option = Option})->
 		io:format("Table ~p is being processed...~n", [TableName]),
 		FilePath = lists:concat([ProtoErlPath, tablex_, TableName, ".erl"]),
@@ -221,10 +228,10 @@ generation_erl(FileContents,ProtoErlPath)->
 		OtherColumnInfo =  [{A,B}||#column{column_name = A, data_type = B, key = false}<-Columns],
 		AutoIncrement = proplists:get_value(auto_increment, Option, false),
 		[{MainKeyName, _}|_] = KeyColumnInfo,
-
+		ModuleName = lists:concat([tablex_, TableName]),
 
 		%%1.写入文件头
-		io:format(Fd, ?HEAD, [?UNICODE2LIST("此文件为自动生成，请勿修改"), time_to_local_string(unixtime()), lists:concat([tablex_, TableName])]),
+		io:format(Fd, ?HEAD, [?UNICODE2LIST("此文件为自动生成，请勿修改"), time_to_local_string(unixtime()), ModuleName]),
 		io:format(Fd, "\n-include(\"table.hrl\").\n", []),
 		io:format(Fd, "\n-define(DATABASE, \"~p\").\n", [DataBase]),
 		io:format(Fd, "\n-define(ETS_NAME, ~s).\n", [lists:concat([ets_, TableName])]),
@@ -233,7 +240,14 @@ generation_erl(FileContents,ProtoErlPath)->
 		io:format(Fd, "\n%%~s", [?UNICODE2LIST("已封装好的对数据库的操作")]),
 		io:format(Fd, "\n-export([read/~p, write/1, find/1, find/3, all/0]).\n", [length(KeyColumnInfo)]),
 		io:format(Fd, "\n%%~s", [?UNICODE2LIST("ETS数据表的操作接口")]),
-		io:format(Fd, "\n-export([init/1, asyn_load/4, ms_select/1, ms_select_count/1, ets_name/0]).\n", []),
+		io:format(Fd, "\n-export([init/1, asyn_load/4," ++ case AutoIncrement of false -> "" ; true -> " init_key/1," end ++ " ms_select/1, ms_select_count/1, ets_name/0]).\n", []),
+		
+		case AutoIncrement of
+			false ->
+				skip;
+			true ->
+				io:format(ToolErlFd, "\n\t~s:init_key(TableName),", [ModuleName])
+		end,
 
 		%%2.写入列的数据类型，将据此做数据转换
 		io:format(Fd, "\ncolumn_info()->\n\t~p.\n", [ColumInfo]),
@@ -429,11 +443,10 @@ read(~s)->
 			_ ->
 				io:format(Fd, "
 write(Record = #~p{~p = undefined})->
-	{ok, [[Max]]} = select(['max(`~p`)'], []),
-	Key = sqlex:get_key(Max),
+	Key = sqlex:get_key(?MODULE),
 	insert(Record#~p{~p = Key}),
 	Key;~n		",
-				[TableName, MainKeyName, MainKeyName, TableName, MainKeyName])
+				[TableName, MainKeyName, TableName, MainKeyName])
 		end,
 		io:format(Fd, "
 write(Record)when is_record(Record, ~p)->
@@ -538,11 +551,30 @@ asyn_load(LMin, LMax, LPid, Options)->
 					_V
 			end
 	end.\n\n", [B61]),
+		
+		
+		case AutoIncrement of
+			false->
+				skip;
+			_ ->
+				io:format(Fd, "~n
+%%--------------------------------------------------------------------
+%% @doc     Init AutoIncrement Key
+%%--------------------------------------------------------------------
+init_key(KeyTableName)->
+	case ?MODULE:select(['max(`~p`)'], []) of
+		{ok, [[undefined]]} ->
+			ok;
+		{ok, [[Max]]} ->
+			ets:insert(KeyTableName, {?MODULE, Max})
+	end,
+	ok.~n		", [MainKeyName])
+		end,
 
 		%%ETS Api
 		io:format(Fd, "
 %%--------------------------------------------------------------------
-%% @doc         ETS API
+%% @doc     ETS API
 %%--------------------------------------------------------------------
 ets_name()->
 	?ETS_NAME.
@@ -554,7 +586,10 @@ ms_select_count(Ms)->
 	ets:select_count(?ETS_NAME, Ms).	", [])
 
 
-	end, FileContents).
+	end, FileContents),
+	io:format(ToolErlFd, "\n\tok.\n", []),
+	file:close(ToolErlFd),
+	ok.
 
 
 backup_history_version(ConfigPath, HistoryPath, Filelist, LastCode, SqlPath, SchemaPath)->

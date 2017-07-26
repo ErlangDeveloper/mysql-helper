@@ -4,7 +4,7 @@
 %%% @doc
 %%%此文件为自动生成，请勿修改
 %%% @end
-%%% Auto Created : 2017-7-25 16:59:52
+%%% Auto Created : 2017-7-26 16:59:53
 %%%-------------------------------------------------------------------
 -module(tablex_user_relationship).
 -include("table.hrl").
@@ -20,7 +20,7 @@
 -export([read/1, write/1, find/1, find/3, all/0]).
 
 %%ETS数据表的操作接口
--export([init/1, asyn_load/4, ms_select/1, ms_select_count/1, ets_name/0]).
+-export([init/1, asyn_load/4, init_key/1, ms_select/1, ms_select_count/1, ets_name/0]).
 
 column_info()->
 	[{uin,int},
@@ -176,8 +176,7 @@ read(Uin)->
 %% @return	ok | error
 %%--------------------------------------------------------------------
 write(Record = #user_relationship{uin = undefined})->
-	{ok, [[Max]]} = select(['max(`uin`)'], []),
-	Key = sqlex:get_key(Max),
+	Key = sqlex:get_key(?MODULE),
 	insert(Record#user_relationship{uin = Key}),
 	Key;
 		
@@ -270,8 +269,21 @@ asyn_load(LMin, LMax, LPid, Options)->
 	end.
 
 
+
 %%--------------------------------------------------------------------
-%% @doc         ETS API
+%% @doc     Init AutoIncrement Key
+%%--------------------------------------------------------------------
+init_key(KeyTableName)->
+	case ?MODULE:select(['max(`uin`)'], []) of
+		{ok, [[undefined]]} ->
+			ok;
+		{ok, [[Max]]} ->
+			ets:insert(KeyTableName, {?MODULE, Max})
+	end,
+	ok.
+		
+%%--------------------------------------------------------------------
+%% @doc     ETS API
 %%--------------------------------------------------------------------
 ets_name()->
 	?ETS_NAME.
