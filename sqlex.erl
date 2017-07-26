@@ -70,20 +70,12 @@ fetch(Sql, Databse)->
 	todo.
 
 %%example
+get_key(undefined)->
+	{success, ServerId} = dd_config:get_cfg(serverid),
+	ServerId * 10000000 + 1;
 get_key(TableName)->
-	gen_server:call(chores, {apply,
-		fun()->
-			Key =
-				case ets:lookup(ets_table_autoIncrement_key, TableName) of
-					[] ->
-						{success, ServerId} = dd_config:get_cfg(serverid),
-						ServerId * 10000000 + 1;
-					[{_, Max}]->
-						Max + 1
-				end,
-			ets:insert(ets_table_autoIncrement_key, {TableName, Key}),
-			Key
-		end, []}).
+	[Key] = ets:update_counter(ets_table_autoIncrement_key, TableName, [{2, 1}]),
+	Key.
 
 %%%===================================================================
 %%% SqlHelper

@@ -564,7 +564,7 @@ asyn_load(LMin, LMax, LPid, Options)->
 init_key(KeyTableName)->
 	case ?MODULE:select(['max(`~p`)'], []) of
 		{ok, [[undefined]]} ->
-			ok;
+			ets:insert(KeyTableName, {?MODULE, sqlex:get_key(undefined)});
 		{ok, [[Max]]} ->
 			ets:insert(KeyTableName, {?MODULE, Max})
 	end,
