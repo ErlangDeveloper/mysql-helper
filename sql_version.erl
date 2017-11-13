@@ -525,11 +525,10 @@ init(Options)->
 %%	apply(Function, Args),
 %%  {StateName, State, ok};
 %%--------------------------------------------------------------------
-asyn_load(LMin, LMax, LPid, Options)->
-	PageSize = LMax - LMin,
+asyn_load(LMin, PageSize , LPid, Options)->
 	Conditions = proplists:get_value(conditions, Options, []),
 	Num =
-		case find(Conditions, {LMin, LMax}, undefined) of
+		case find(Conditions, {LMin, PageSize}, undefined) of
 			[] ->
 				0;
 			RowList->
@@ -540,7 +539,7 @@ asyn_load(LMin, LMax, LPid, Options)->
 		end,
 	case Num >= PageSize of
 		true ->
-			F2 = fun()-> ?MODULE:asyn_load(LMin + PageSize, LMax + PageSize, LPid, Options)end,
+			F2 = fun()-> ?MODULE:asyn_load(LMin + PageSize, PageSize, LPid, Options)end,
 			LPid ! {apply, F2, []};
 		_ ->
 			CompleteCallBack = proplists:get_value(complete_callback, Options, skip),
